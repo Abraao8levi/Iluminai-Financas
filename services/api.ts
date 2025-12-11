@@ -1,6 +1,8 @@
-import { Transaction, Goal, Category, UserProfile, AppSettings } from '../types';
+import { AppSettings, Goal, Transaction, UserProfile } from '../types';
 
-const API_URL = 'http://localhost:5000/api';
+// Usa 127.0.0.1 explicitamente para evitar problemas de resolução IPv6 no Windows
+// Permite sobrescrever via variável de ambiente VITE_API_URL se necessário
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Helper to get token
 const getToken = () => localStorage.getItem('auth_token');

@@ -1,10 +1,17 @@
 import React from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis, YAxis
 } from 'recharts';
-import { Transaction, TransactionType } from '../types';
 import { CATEGORY_COLORS } from '../constants';
+import { Transaction, TransactionType } from '../types';
 
 interface Props {
   transactions: Transaction[];
@@ -58,7 +65,7 @@ const FinancialCharts: React.FC<Props> = ({ transactions }) => {
       {/* Activity Chart */}
       <div className="bg-surface border border-slate-700/50 rounded-2xl p-6">
         <h3 className="text-lg font-bold text-white mb-6">Fluxo de Caixa Semanal</h3>
-        <div className="h-[300px] w-full">
+        <div className="h-[300px] w-full flex items-center justify-center">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={weeklyData} barSize={12}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />

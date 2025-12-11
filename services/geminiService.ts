@@ -1,9 +1,11 @@
+/// <reference types="vite/client" />
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Transaction } from '../types';
 
 const getAiClient = () => {
   // A chave da API é injetada pelo Vite a partir do arquivo .env
-  const apiKey = process.env.GEMINI_API_KEY;
+  // Certifique-se de que sua variável no .env seja VITE_GEMINI_API_KEY
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   
   if (!apiKey || apiKey === "your_gemini_api_key_here") {
     throw new Error("MISSING_API_KEY");
@@ -18,6 +20,7 @@ export const getFinancialAdvice = async (
 ): Promise<string> => {
   try {
     const ai = getAiClient();
+    // CORREÇÃO AQUI: Voltamos para o modelo 'gemini-pro' que é o padrão estável
     const model = ai.getGenerativeModel({ model: "gemini-pro" });
     
     // Simplificar os dados para reduzir consumo de tokens
@@ -44,7 +47,7 @@ export const getFinancialAdvice = async (
     `;
 
     const result = await model.generateContent(prompt);
-    const response = await result.response;
+    const response = result.response;
     const text = response.text();
 
     return text || "Desculpe, não consegui analisar seus dados no momento.";
@@ -67,6 +70,7 @@ export const getFinancialAdvice = async (
 export const generateMonthlyInsight = async (transactions: Transaction[]): Promise<string> => {
     try {
         const ai = getAiClient();
+        // CORREÇÃO AQUI TAMBÉM: Usar 'gemini-pro'
         const model = ai.getGenerativeModel({ model: "gemini-pro" });
         
         if (transactions.length === 0) return "Adicione transações para receber insights personalizados da IA.";
@@ -87,7 +91,7 @@ export const generateMonthlyInsight = async (transactions: Transaction[]): Promi
         `;
 
         const result = await model.generateContent(prompt);
-        const response = await result.response;
+        const response = result.response;
         const text = response.text();
 
         return text || "Sem insights disponíveis no momento.";
