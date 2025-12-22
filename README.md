@@ -11,7 +11,7 @@
     <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
     <img src="https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white" alt="ExpressJS">
     <img src="https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
-    <img src="https://img.shields.io/badge/Gemini_AI-8E75B2?style=for-the-badge&logo=google&logoColor=white" alt="Gemini AI">
+    
 </p>
 
 </div>
@@ -54,12 +54,12 @@ O objetivo é oferecer uma experiência de usuário fluida e inteligente, transf
 
 ## 🛠️ Tecnologias Utilizadas
 
-| Frontend                 | Backend                  | Banco de Dados | Autenticação         | IA                |
-| ------------------------ | ------------------------ | -------------- | -------------------- | ----------------- |
-| React                    | Node.js                  | SQLite         | Passport.js          | Google Gemini Pro |
-| TypeScript               | Express.js               | Sequelize (ORM)| JWT (JSON Web Token) |                   |
-| TailwindCSS              |                          |                | bcrypt.js            |                   |
-| Vite                     |                          |                |                      |                   |
+| Frontend                 | Backend                  | Banco de Dados | Autenticação         |
+| ------------------------ | ------------------------ | -------------- | -------------------- |
+| React                    | Node.js                  | SQLite         | Passport.js          |
+| TypeScript               | Express.js               | Sequelize (ORM)| JWT (JSON Web Token) |
+| TailwindCSS              |                          |                | bcrypt.js            |
+| Vite                     |                          |                |                      |
 
 ---
 
