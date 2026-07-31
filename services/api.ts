@@ -166,3 +166,16 @@ export const fetchAiStatus = async (): Promise<{ provider: string; active: boole
   if (!res.ok) return { provider: 'gemini', active: false };
   return await res.json();
 };
+
+export const parseReceiptWithAI = async (fileBase64: string, mimeType: string) => {
+  const res = await fetch(`${API_URL}/ai/parse-receipt`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ fileBase64, mimeType })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Erro ao interpretar comprovante');
+  }
+  return await res.json();
+};

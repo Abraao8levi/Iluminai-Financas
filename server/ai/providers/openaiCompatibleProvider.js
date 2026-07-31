@@ -104,6 +104,65 @@ Dados: ${JSON.stringify(simplified)}`;
       return "Não foi possível gerar insights automáticos no momento.";
     }
   }
+
+  async parseReceipt(fileBase64, mimeType = 'image/jpeg') {
+    if (!this.apiKey && !this.baseUrl.includes('localhost')) {
+      throw new Error(`Chave de API para ${this.providerName} não configurada no backend.`);
+    }
+
+    const cleanBase64 = fileBase64.startsWith('data:')
+      ? fileBase64
+      : `data:${mimeType};base64,${fileBase64}`;
+
+    const prompt = `Analise a imagem deste comprovante ou recibo financeiro e extraia as informações em formato JSON estrito, sem textos adicionais ou marcação markdown extra.
+Retorne um objeto JSON com as chaves:
+- description (string): Nome do estabelecimento ou descrição resumida.
+- amount (number): Valor total numérico positivo (ex: 150.50).
+- date (string): Data no formato YYYY-MM-DD. Se não encontrar, use a data atual.
+- category (string): Categoria sugerida entre: Alimentação, Transporte, Moradia, Entretenimento, Saúde, Restaurante, Salário, Freelance, Investimentos, Outros.
+- type (string): "EXPENSE" ou "INCOME".
+- accountType (string): "Cartão de Crédito", "Conta Corrente", "PIX" ou "Poupança".`;
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (this.apiKey) {
+        headers['Authorization'] = `Bearer ${this.apiKey}`;
+      }
+
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                {
+                  type: 'image_url',
+                  image_url: { url: cleanBase64 }
+                }
+              ]
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson?.error?.message || `Erro HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const rawText = data?.choices?.[0]?.message?.content || '';
+      const jsonString = rawText.replace(/```json|```/g, '').trim();
+      return JSON.parse(jsonString);
+    } catch (err) {
+      console.error(`${this.providerName} parseReceipt Error:`, err.message);
+      throw new Error(`Falha ao ler comprovante com ${this.providerName}: ${err.message}`);
+    }
+  }
 }
 
 module.exports = OpenAICompatibleProvider;

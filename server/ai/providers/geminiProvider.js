@@ -89,6 +89,58 @@ Dados: ${JSON.stringify(simplified)}`;
       return "Não foi possível gerar insights automáticos no momento.";
     }
   }
+
+  async parseReceipt(fileBase64, mimeType = 'image/jpeg') {
+    if (!this.apiKey) {
+      throw new Error('Chave do Gemini (GEMINI_API_KEY) não configurada no backend');
+    }
+
+    const cleanBase64 = fileBase64.replace(/^data:(.*);base64,/, '');
+
+    const prompt = `Analise a imagem deste comprovante ou recibo financeiro e extraia as informações em formato JSON estrito, sem textos adicionais ou marcação markdown extra.
+Retorne um objeto JSON com as chaves:
+- description (string): Nome do estabelecimento ou descrição resumida.
+- amount (number): Valor total numérico positivo (ex: 150.50).
+- date (string): Data no formato YYYY-MM-DD. Se não encontrar, use a data atual.
+- category (string): Categoria sugerida entre: Alimentação, Transporte, Moradia, Entretenimento, Saúde, Restaurante, Salário, Freelance, Investimentos, Outros.
+- type (string): "EXPENSE" ou "INCOME".
+- accountType (string): "Cartão de Crédito", "Conta Corrente", "PIX" ou "Poupança".`;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:generateContent?key=${this.apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt },
+                {
+                  inlineData: {
+                    mimeType: mimeType.startsWith('image/') ? mimeType : 'image/jpeg',
+                    data: cleanBase64
+                  }
+                }
+              ]
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson?.error?.message || `Erro HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const jsonString = rawText.replace(/```json|```/g, '').trim();
+      return JSON.parse(jsonString);
+    } catch (err) {
+      console.error('Gemini parseReceipt Error:', err.message);
+      throw new Error(`Falha ao ler comprovante com Gemini: ${err.message}`);
+    }
+  }
 }
 
 module.exports = GeminiProvider;

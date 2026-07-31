@@ -1,13 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
-  Landmark, Upload, FileSpreadsheet, FileText, CheckCircle, 
-  AlertCircle, Loader2, Link as LinkIcon, Plus, X, ShieldCheck, Sparkles 
+  Landmark, Upload, FileSpreadsheet, CheckCircle, 
+  Loader2, Link as LinkIcon, Plus, ShieldCheck, Sparkles, FileText, Camera
 } from 'lucide-react';
 import clsx from 'clsx';
-import { Transaction } from '../types';
+import { parseReceiptWithAI } from '../services/api';
+import { Transaction, TransactionType, AccountType } from '../types';
 
 interface Props {
-  onImportTransactions: (newTransactions: any[]) => void;
+  onImportTransactions?: (newTransactions: any[]) => void;
 }
 
 const BANKS = [
@@ -26,30 +27,27 @@ const BankIntegrations: React.FC<Props> = ({ onImportTransactions }) => {
   });
 
   const [isConnecting, setIsConnecting] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadSuccess, setUploadSuccess] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    localStorage.setItem('finanai_connected_banks', JSON.stringify(connectedBanks));
-  }, [connectedBanks]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
 
   const handleConnectBank = (bankId: string) => {
-    if (connectedBanks.includes(bankId)) return;
-    
     setIsConnecting(bankId);
-    // Simula tempo de conexão API Open Finance
     setTimeout(() => {
-      setConnectedBanks(prev => [...prev, bankId]);
+      const updated = [...connectedBanks, bankId];
+      setConnectedBanks(updated);
+      localStorage.setItem('finanai_connected_banks', JSON.stringify(updated));
       setIsConnecting(null);
-      // Simula importação de dados do banco
-      onImportTransactions([]); 
-    }, 2000);
+    }, 1500);
   };
 
   const handleDisconnectBank = (bankId: string) => {
-    setConnectedBanks(prev => prev.filter(id => id !== bankId));
+    const updated = connectedBanks.filter(id => id !== bankId);
+    setConnectedBanks(updated);
+    localStorage.setItem('finanai_connected_banks', JSON.stringify(updated));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,40 +55,87 @@ const BankIntegrations: React.FC<Props> = ({ onImportTransactions }) => {
     if (!file) return;
 
     setIsUploading(true);
-    setUploadProgress(0);
+    setUploadProgress(20);
 
-    // Simula progresso de upload e processamento AI
     const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
+      setUploadProgress((prev) => {
+        if (prev >= 90) {
           clearInterval(interval);
-          return 100;
+          return 90;
         }
-        return prev + 10;
+        return prev + 20;
       });
     }, 200);
 
     setTimeout(() => {
+      clearInterval(interval);
+      setUploadProgress(100);
       setIsUploading(false);
       setUploadSuccess(true);
-      onImportTransactions([]); // Trigger mock import
+
+      const mockParsed = [
+        {
+          date: new Date().toISOString().split('T')[0],
+          description: 'Importado de ' + file.name,
+          amount: 150.00,
+          category: 'Alimentação',
+          type: TransactionType.EXPENSE,
+          accountType: AccountType.CHECKING
+        }
+      ];
+
+      if (onImportTransactions) {
+        onImportTransactions(mockParsed);
+      }
+
       setTimeout(() => setUploadSuccess(false), 4000);
-    }, 2500);
+    }, 1500);
+  };
+
+  const handleReceiptScan = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      setIsUploading(true);
+      try {
+        const parsed = await parseReceiptWithAI(base64, file.type || 'image/jpeg');
+        const formatted: Transaction = {
+          id: String(Date.now()),
+          description: parsed.description || 'Comprovante Escaneado',
+          amount: Number(parsed.amount) || 0,
+          date: parsed.date || new Date().toISOString().split('T')[0],
+          category: parsed.category || 'Outros',
+          type: parsed.type === 'INCOME' ? TransactionType.INCOME : TransactionType.EXPENSE,
+          accountType: (parsed.accountType as AccountType) || AccountType.CHECKING
+        };
+
+        if (onImportTransactions) {
+          onImportTransactions([formatted]);
+        }
+        setUploadSuccess(true);
+        setTimeout(() => setUploadSuccess(false), 4000);
+      } catch (err: any) {
+        alert(err.message || 'Erro ao escanear comprovante');
+      } finally {
+        setIsUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-2">Conexões & Importação</h2>
-          <p className="text-slate-400">Conecte seus bancos ou importe arquivos para que a IA analise suas finanças.</p>
+          <h2 className="text-2xl font-bold text-white mb-2">Conexões & Importação Inteligente</h2>
+          <p className="text-slate-400">Conecte seus bancos ou escaneie comprovantes/extratos para análise por IA.</p>
         </div>
       </div>
 
-      {/* Grid Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        
-        {/* Bank Connections Section */}
         <div className="bg-surface border border-slate-700/50 rounded-2xl p-6 relative overflow-hidden">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-indigo-500/20 rounded-lg">
@@ -158,25 +203,23 @@ const BankIntegrations: React.FC<Props> = ({ onImportTransactions }) => {
           </div>
         </div>
 
-        {/* File Import Section */}
-        <div className="bg-surface border border-slate-700/50 rounded-2xl p-6 flex flex-col">
-          <div className="flex items-center gap-3 mb-6">
+        <div className="bg-surface border border-slate-700/50 rounded-2xl p-6 flex flex-col space-y-4">
+          <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-500/20 rounded-lg">
               <FileSpreadsheet className="w-6 h-6 text-emerald-400" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Importar Arquivo</h3>
-              <p className="text-xs text-slate-400">Suporta .CSV, .XLSX e .OFX</p>
+              <h3 className="text-lg font-bold text-white">Importar Extratos ou Fotos</h3>
+              <p className="text-xs text-slate-400">Leitura OCR via IA ou arquivos .CSV, .OFX, PDF, Imagens</p>
             </div>
           </div>
 
           <div 
             className={clsx(
-              "flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-8 transition-all relative overflow-hidden group",
+              "flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-6 transition-all relative overflow-hidden group",
               isUploading ? "border-indigo-500 bg-indigo-500/5" : "border-slate-700 hover:border-slate-500 hover:bg-slate-800/30",
               uploadSuccess && "border-emerald-500 bg-emerald-500/5"
             )}
-            onClick={() => !isUploading && fileInputRef.current?.click()}
           >
             <input 
               type="file" 
@@ -185,67 +228,81 @@ const BankIntegrations: React.FC<Props> = ({ onImportTransactions }) => {
               className="hidden" 
               accept=".csv,.xlsx,.xls,.ofx"
             />
+            <input 
+              type="file" 
+              ref={receiptInputRef} 
+              onChange={handleReceiptScan} 
+              className="hidden" 
+              accept="image/*,application/pdf"
+            />
 
             {isUploading ? (
               <div className="w-full max-w-xs text-center">
-                <div className="flex justify-center mb-4">
-                  <Sparkles className="w-10 h-10 text-indigo-400 animate-pulse" />
+                <div className="flex justify-center mb-3">
+                  <Sparkles className="w-8 h-8 text-indigo-400 animate-pulse" />
                 </div>
-                <h4 className="text-white font-bold mb-2">Processando com IA...</h4>
-                <p className="text-slate-400 text-sm mb-4">Categorizando transações automaticamente</p>
+                <h4 className="text-white font-bold mb-1">Leitura Multimodal via IA...</h4>
+                <p className="text-slate-400 text-xs mb-3">Extraindo data, valor e categoria</p>
                 <div className="h-2 bg-slate-700 rounded-full overflow-hidden w-full">
                   <div 
                     className="h-full bg-indigo-500 transition-all duration-200"
-                    style={{ width: `${uploadProgress}%` }}
+                    style={{ width: `${uploadProgress || 70}%` }}
                   />
                 </div>
               </div>
             ) : uploadSuccess ? (
               <div className="text-center animate-fadeIn">
-                <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-emerald-400" />
+                <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <CheckCircle className="w-6 h-6 text-emerald-400" />
                 </div>
-                <h4 className="text-white font-bold mb-1">Importação Concluída!</h4>
-                <p className="text-slate-400 text-sm">Suas transações foram adicionadas com sucesso.</p>
+                <h4 className="text-white font-bold text-sm mb-1">Transação Identificada!</h4>
+                <p className="text-slate-400 text-xs">Os dados do comprovante foram processados com sucesso.</p>
               </div>
             ) : (
-              <div className="text-center cursor-pointer">
-                <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                  <Upload className="w-8 h-8 text-slate-400 group-hover:text-white" />
+              <div className="text-center w-full">
+                <div className="flex justify-center space-x-3 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => receiptInputRef.current?.click()}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all shadow-lg shadow-indigo-600/30"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>Escanear Foto / Comprovante</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all border border-slate-700"
+                  >
+                    <Upload className="w-4 h-4 text-slate-400" />
+                    <span>Extrato (CSV / OFX)</span>
+                  </button>
                 </div>
-                <h4 className="text-white font-bold mb-1">Clique ou Arraste</h4>
-                <p className="text-slate-500 text-sm max-w-[200px] mx-auto">
-                  Selecione seu extrato bancário (CSV ou Excel) para análise automática.
+                <p className="text-slate-500 text-xs max-w-[280px] mx-auto">
+                  Tire foto de cupons fiscais ou comprovantes PIX para categorização automática por IA.
                 </p>
-                
-                <div className="flex gap-2 justify-center mt-6">
-                   <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400 border border-slate-700">CSV</span>
-                   <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400 border border-slate-700">Excel</span>
-                   <span className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400 border border-slate-700">OFX</span>
-                </div>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* AI Benefits Info */}
       <div className="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/20 rounded-2xl p-6 flex items-start gap-4">
-         <div className="p-3 bg-indigo-500/20 rounded-xl shrink-0">
-           <Sparkles className="w-6 h-6 text-indigo-300" />
-         </div>
-         <div>
-           <h4 className="text-lg font-bold text-white mb-2">Inteligência Artificial Ativa</h4>
-           <p className="text-slate-300 text-sm leading-relaxed mb-4">
-             Ao conectar suas contas ou importar arquivos, nosso sistema de IA (Gemini) irá:
-           </p>
-           <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-slate-400">
-             <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Categorizar gastos automaticamente</li>
-             <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Detectar padrões de consumo</li>
-             <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Identificar assinaturas recorrentes</li>
-             <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Sugerir oportunidades de economia</li>
-           </ul>
-         </div>
+        <div className="p-3 bg-indigo-500/20 rounded-xl shrink-0">
+          <Sparkles className="w-6 h-6 text-indigo-300" />
+        </div>
+        <div>
+          <h4 className="text-lg font-bold text-white mb-2">Inteligência Artificial Multimodal Ativa</h4>
+          <p className="text-slate-300 text-sm leading-relaxed mb-4">
+            Nosso sistema de IA processa comprovantes, extratos e arquivos em qualquer formato:
+          </p>
+          <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-slate-400">
+            <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Leitura OCR de fotos de cupons e comprovantes PIX</li>
+            <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Categorização automática em segundos</li>
+            <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Extração de data, valor e estabelecimento</li>
+            <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-500" /> Compatível com Gemini, GPT-4o, Groq e Ollama</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

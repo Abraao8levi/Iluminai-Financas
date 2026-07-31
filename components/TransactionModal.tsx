@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Check, DollarSign, Calendar, Tag, FileText, Wallet } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Check, DollarSign, Calendar, Tag, FileText, Wallet, Sparkles, Loader2, Upload } from 'lucide-react';
 import { Transaction, TransactionType, AccountType, Category } from '../types';
+import { parseReceiptWithAI } from '../services/api';
 import clsx from 'clsx';
 
 interface Props {
@@ -19,31 +20,29 @@ const TransactionModal: React.FC<Props> = ({ isOpen, onClose, onSave, initialDat
   const [date, setDate] = useState('');
   const [accountType, setAccountType] = useState<AccountType>(AccountType.CHECKING);
 
-  // Effect to pre-fill data when modal opens or initialData changes
+  const [isScanning, setIsScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        // EDIT MODE: Pre-fill all fields
         setType(initialData.type);
         setAmount(initialData.amount.toString());
         setDescription(initialData.description);
         setCategory(initialData.category);
-        
-        // Ensure date is in YYYY-MM-DD format for the input
-        // Handles cases where date might be an ISO string with time
+
         const formattedDate = initialData.date.includes('T') 
           ? initialData.date.split('T')[0] 
           : initialData.date;
         setDate(formattedDate);
-        
+
         setAccountType(initialData.accountType);
       } else {
-        // CREATE MODE: Reset fields to default
         setType(TransactionType.EXPENSE);
         setAmount('');
         setDescription('');
         setCategory('');
-        setDate(new Date().toISOString().split('T')[0]); // Today
+        setDate(new Date().toISOString().split('T')[0]);
         setAccountType(AccountType.CHECKING);
       }
     }
@@ -51,12 +50,40 @@ const TransactionModal: React.FC<Props> = ({ isOpen, onClose, onSave, initialDat
 
   if (!isOpen) return null;
 
+  const handleScanReceipt = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result as string;
+      setIsScanning(true);
+      try {
+        const parsed = await parseReceiptWithAI(base64, file.type || 'image/jpeg');
+        if (parsed.description) setDescription(parsed.description);
+        if (parsed.amount) setAmount(String(parsed.amount));
+        if (parsed.date) setDate(parsed.date);
+        if (parsed.category) setCategory(parsed.category);
+        if (parsed.type && Object.values(TransactionType).includes(parsed.type)) {
+          setType(parsed.type as TransactionType);
+        }
+        if (parsed.accountType && Object.values(AccountType).includes(parsed.accountType)) {
+          setAccountType(parsed.accountType as AccountType);
+        }
+      } catch (err: any) {
+        alert(err.message || 'Erro ao processar comprovante com IA');
+      } finally {
+        setIsScanning(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || !description || !category || !date) return;
 
     const transactionData = {
-      // Include ID only if editing
       ...(initialData && { id: initialData.id }),
       type,
       amount: parseFloat(amount),
@@ -66,7 +93,6 @@ const TransactionModal: React.FC<Props> = ({ isOpen, onClose, onSave, initialDat
       accountType
     };
 
-    // Casting ensures TypeScript knows this matches the expected type
     onSave(transactionData as Transaction);
     onClose();
   };
@@ -93,7 +119,38 @@ const TransactionModal: React.FC<Props> = ({ isOpen, onClose, onSave, initialDat
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
           
-          {/* Type Toggle */}
+          <div className="flex items-center justify-between p-3 bg-indigo-950/40 border border-indigo-500/30 rounded-xl">
+            <div className="flex items-center space-x-2 text-indigo-300 text-xs font-semibold">
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+              <span>Preencher com Leitura Inteligente de IA</span>
+            </div>
+            <button
+              type="button"
+              disabled={isScanning}
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium flex items-center space-x-1.5 transition-colors disabled:opacity-50"
+            >
+              {isScanning ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Lendo...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Comprovante</span>
+                </>
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={handleScanReceipt}
+              className="hidden"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-3 p-1 bg-slate-900 rounded-xl">
             <button
               type="button"
@@ -121,108 +178,97 @@ const TransactionModal: React.FC<Props> = ({ isOpen, onClose, onSave, initialDat
             </button>
           </div>
 
-          {/* Amount */}
-          <div>
-            <label className="text-sm font-medium text-slate-300 mb-2 block">Valor</label>
-            <div className="relative">
-              <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <input
-                type="number"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-12 pr-4 py-4 text-xl font-bold text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all placeholder-slate-600"
-                required
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5 text-indigo-400" /> Valor (R$)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              required
+              placeholder="0,00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-lg font-semibold focus:outline-none focus:border-indigo-500 transition-colors"
+            />
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="text-sm font-medium text-slate-300 mb-2 block">Descrição</label>
-            <div className="relative">
-              <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <input
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Ex: Compras no mercado"
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all placeholder-slate-600"
-                required
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-indigo-400" /> Descrição
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="Ex: Supermercado, Salário, iFood..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Category */}
-            <div>
-              <label className="text-sm font-medium text-slate-300 mb-2 block">Categoria</label>
-              <div className="relative">
-                <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all appearance-none cursor-pointer"
-                  required
-                >
-                  <option value="" disabled>Selecione</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.name}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-indigo-400" /> Categoria
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Alimentação, Transporte..."
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+              />
             </div>
 
-            {/* Date */}
-            <div>
-              <label className="text-sm font-medium text-slate-300 mb-2 block">Data</label>
-              <div className="relative">
-                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all [color-scheme:dark]"
-                  required
-                />
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-indigo-400" /> Data
+              </label>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+              />
             </div>
           </div>
 
-          {/* Account Type */}
-          <div>
-            <label className="text-sm font-medium text-slate-300 mb-2 block">Conta / Forma de Pagamento</label>
-            <div className="relative">
-              <Wallet className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <select
-                value={accountType}
-                onChange={(e) => setAccountType(e.target.value as AccountType)}
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all appearance-none cursor-pointer"
-              >
-                {accountTypes.map(acc => (
-                  <option key={acc} value={acc}>{acc}</option>
-                ))}
-              </select>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+              <Wallet className="w-3.5 h-3.5 text-indigo-400" /> Tipo de Conta
+            </label>
+            <select
+              value={accountType}
+              onChange={(e) => setAccountType(e.target.value as AccountType)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+            >
+              {accountTypes.map((acc) => (
+                <option key={acc} value={acc}>
+                  {acc}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="pt-4 border-t border-slate-700/50 flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition-colors flex items-center justify-center gap-2"
+            >
+              <Check className="w-5 h-5" /> Salvar
+            </button>
           </div>
         </form>
-
-        <div className="p-6 border-t border-slate-700/50 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 text-slate-300 hover:text-white hover:bg-slate-700/50 rounded-xl font-medium transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSubmit}
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/25 flex items-center gap-2"
-          >
-            <Check className="w-5 h-5" />
-            {initialData ? 'Salvar Alterações' : 'Criar Transação'}
-          </button>
-        </div>
       </div>
     </div>
   );

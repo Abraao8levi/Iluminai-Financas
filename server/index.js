@@ -432,7 +432,22 @@ app.post('/api/ai/insight', authenticate, async (req, res) => {
   }
 });
 
+app.post('/api/ai/parse-receipt', authenticate, async (req, res) => {
+  try {
+    const { fileBase64, mimeType } = req.body;
+    if (!fileBase64) {
+      return res.status(400).json({ message: 'Arquivo em base64 é obrigatório.' });
+    }
+    const provider = AIFactory.getProvider();
+    const parsedData = await provider.parseReceipt(fileBase64, mimeType || 'image/jpeg');
+    res.json(parsedData);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Start Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+});
+
