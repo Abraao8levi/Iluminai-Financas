@@ -403,10 +403,30 @@ app.put('/api/categories/:id', authenticate, async (req, res) => {
   }
 });
 
-app.delete('/api/categories/:id', authenticate, async (req, res) => {
+// 6. AI Multi-Provider Routes
+const AIFactory = require('./ai/aiFactory');
+
+app.get('/api/ai/status', (req, res) => {
+  res.json(AIFactory.getProviderInfo());
+});
+
+app.post('/api/ai/advice', authenticate, async (req, res) => {
   try {
-    await Category.destroy({ where: { id: req.params.id, userId: req.user.id } });
-    res.json({ message: 'Category deleted' });
+    const { userQuery, transactions } = req.body;
+    const provider = AIFactory.getProvider();
+    const advice = await provider.generateAdvice(transactions || [], userQuery || '');
+    res.json({ advice });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+app.post('/api/ai/insight', authenticate, async (req, res) => {
+  try {
+    const { transactions } = req.body;
+    const provider = AIFactory.getProvider();
+    const insight = await provider.generateInsight(transactions || []);
+    res.json({ insight });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -415,4 +435,4 @@ app.delete('/api/categories/:id', authenticate, async (req, res) => {
 // Start Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+});
